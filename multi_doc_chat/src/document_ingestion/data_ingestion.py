@@ -108,3 +108,5 @@ class FaissManager:
         self.vector_store.add_documents(documents)
         self.vector_store.save_local(str(self.index_dir))
         return self.vector_store
+
+
