@@ -56,6 +56,14 @@ class ChatIngestor:
 
         return self._split(docs)
 
+    def build_retriever_from_paths(self, paths):
+        docs = load_documents(paths)
+
+        if not docs:
+            raise ValueError("No valid documents were provided")
+
+        return self._split(docs)
+
     # Keep the old misspelled method working for existing callers.
     build_retreiver = build_retriever
 
@@ -103,10 +111,16 @@ class FaissManager:
             return self.vector_store
 
         if self.vector_store is None:
-            return self.load_or_create(documents)
+            if self._index_exists():
+                self.vector_store = FAISS.load_local(
+                    str(self.index_dir),
+                    self.embedding_model,
+                    allow_dangerous_deserialization=True,
+                )
+            else:
+                return self.load_or_create(documents)
 
         self.vector_store.add_documents(documents)
         self.vector_store.save_local(str(self.index_dir))
         return self.vector_store
-
 

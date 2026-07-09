@@ -1,43 +1,86 @@
-import logging
 import os
-import sqlite3
 from pathlib import Path
 
 from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+
+from multi_doc_chat.model.db_models import Base
 
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
-ENV_PATH = ROOT_DIR / ".env"
-DEFAULT_DB_PATH = ROOT_DIR / "data" / "app.db"
-
-logger = logging.getLogger(__name__)
+load_dotenv()
 
 
-def get_database_path() -> Path:
-    load_dotenv(ENV_PATH, override=True)
-
-    db_path = os.getenv("DATABASE_PATH") or os.getenv("SQLITE_DB_PATH")
-    if not db_path:
-        return DEFAULT_DB_PATH
-
-    return Path(db_path).expanduser()
+DEFAULT_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "rag_project_db.sqlite"
 
 
-def get_database_connection() -> sqlite3.Connection:
-    db_path = get_database_path()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
+def normalize_database_url(database_url: str) -> str:
+    """Make common database URLs work with SQLAlchemy."""
+    database_url = database_url.strip()
 
-    logger.info("Connecting to database: %s", db_path)
+    # Neon sometimes gives postgres://, but SQLAlchemy needs postgresql+psycopg://
+    if database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql+psycopg://", 1)
 
-    connection = sqlite3.connect(db_path)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
-    logger.info("Database connected successfully")
-    return connection
+    if database_url.startswith("mysql://"):
+        return database_url.replace("mysql://", "mysql+pymysql://", 1)
+
+    return database_url
 
 
-def close_database_connection(connection: sqlite3.Connection) -> None:
-    if connection:
-        connection.close()
-        logger.info("Database connection closed")
+def get_database_url() -> str:
+    database_url = (
+        os.getenv("NEON_DATABASE_URL")
+        or os.getenv("NEON_DB_URL")
+        or os.getenv("DATABASE_URL")
+        or os.getenv("POSTGRES_URL")
+        or os.getenv("MYSQL_URL")
+    )
+
+    if database_url:
+        return normalize_database_url(database_url)
+
+    return f"sqlite:///{DEFAULT_DB_PATH.as_posix()}"
+
+
+def create_db_engine(database_url: str | None = None):
+    database_url = normalize_database_url(database_url or get_database_url())
+
+    if database_url.startswith("sqlite"):
+        DEFAULT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        return create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+        )
+
+    return create_engine(database_url, pool_pre_ping=True)
+
+
+engine = create_db_engine()
+
+SessionLocal = sessionmaker(
+    bind=engine,
+    autocommit=False,
+    autoflush=False,
+)
+
+
+def get_session():
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def init_db(db_engine=engine):
+    Base.metadata.create_all(bind=db_engine)
+
+
+def check_database_connection(db_engine=engine) -> bool:
+    with db_engine.connect() as connection:
+        connection.execute(text("SELECT 1"))
+    return True

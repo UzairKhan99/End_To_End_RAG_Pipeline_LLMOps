@@ -22,6 +22,10 @@ dependencies = [
     "pandas>=3.0.3",
     "python-dotenv==1.1.1",
     "python-multipart==0.0.20",
+    "pymysql>=1.1.0",
+    "psycopg[binary]>=3.2.0",
+    "sentence-transformers>=5.0.0",
     "structlog>=26.1.0",
+    "sqlalchemy>=2.0.0",
     "uvicorn==0.32.1",
 ]
