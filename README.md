@@ -1,5 +1,4 @@
-````markdown
-<div align="center">
+
 
 <img src="assets/end_to_end_rag_pipeline.png" alt="End-to-End RAG Pipeline" width="100%">
 
